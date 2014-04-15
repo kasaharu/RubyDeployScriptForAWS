@@ -1,5 +1,6 @@
 require 'aws-sdk'
 require 'dotenv'
+require 'net/ssh'
 Dotenv.load
 
 ACCESS_KEY_ID        = ENV['ACCESS_KEY_ID']
@@ -27,7 +28,7 @@ AWS.config({
 
 
 
-INSTANCE_NAME        = "appServer_newInstnce"
+INSTANCE_NAME        = "appServer_newInstnce_9"
 NAME_TAG             = "Name"
 GENERATION_TAG       = "Generation"
 NEXT_GENERATION      = "next"
@@ -74,6 +75,7 @@ p "Status is #{@new_instance.status}!"
     if (tag[:key] == NAME_TAG && tag[:value] == INSTANCE_NAME)
       @instance_pub_ip_addr = @new_instance.public_ip_address
       @instance_id          = @new_instance.id
+      @instance_dns_name    = @new_instance.public_dns_name
     end
   end
 end
@@ -99,8 +101,43 @@ p "Finished status check."
 ############################## Running Chef
 
 `knife solo prepare -i #{SSH_KEY_FILE_PATH} #{REMOTE_USER}@#{@instance_pub_ip_addr}`
+p "solo prepare done."
 `cat nodes/template.json > nodes/#{@instance_pub_ip_addr}.json`
+p "copy template done."
+##
+##`scp -i #{SSH_KEY_FILE_PATH} #{APP_PATH}/#{APP_FILE_NAME} #{REMOTE_USER}@#{@instance_pub_ip_addr}:/home/#{REMOTE_USER}`
+##`scp -i #{SSH_KEY_FILE_PATH} #{THIS_SCRIPT_PATH}/forRemoteServer/run_app.sh  #{REMOTE_USER}@#{@instance_pub_ip_addr}:/home/#{REMOTE_USER}`
+##`scp -i #{SSH_KEY_FILE_PATH} #{THIS_SCRIPT_PATH}/forRemoteServer/.env.forApp  #{REMOTE_USER}@#{@instance_pub_ip_addr}:/home/#{REMOTE_USER}`
+##
 `knife solo cook -i #{SSH_KEY_FILE_PATH} #{REMOTE_USER}@#{@instance_pub_ip_addr}`
+p "solo cook done."
+p "installed ruby"
+
+#Net::SSH.start(@instance_dns_name, REMOTE_USER, :keys => SSH_KEY_FILE_PATH) do |ssh|
+#  print(ssh.exec!('tail ~/.bashrc > testtest.txt'))
+#  print(ssh.exec!('source ~/.bashrc'))
+#  print(ssh.exec!('exec $SHELL -l'))
+#  print(ssh.exec!('mkdir /home/ubuntu/sample'))
+#end
+
+##`cat nodes/template_rails.json > nodes/#{@instance_pub_ip_addr}.json`
+##`knife solo cook -i #{SSH_KEY_FILE_PATH} #{REMOTE_USER}@#{@instance_pub_ip_addr}`
+##p "solo cook done."
+##p "installed rails"
+
+##p "@new_instance.exec_using_ssh!(cd /home/#{REMOTE_USER}/)"
+##@new_instance.exec_using_ssh!("cd /home/#{REMOTE_USER}/")
+##
+##p "@new_instance.exec_using_ssh!(tar zxvf #{APP_FILE_NAME})"
+##@new_instance.exec_using_ssh!("tar zxvf #{APP_FILE_NAME}")
+##
+##sleep(5)
+##p "@new_instance.exec_using_ssh!(cd /home/#{REMOTE_USER}/nflc_key_server/; /home/#{REMOTE_USER}/.rbenv/shims/bundle install)"
+##@new_instance.exec_using_ssh!("cd /home/#{REMOTE_USER}/nflc_key_server/; /home/#{REMOTE_USER}/.rbenv/shims/bundle install")
+##
+##sleep(5)
+##p "@new_instance.exec_using_ssh!(bash /home/#{REMOTE_USER}/run_app.sh)"
+##@new_instance.exec_using_ssh!("bash /home/#{REMOTE_USER}/run_app.sh")
 
 
 p "Finished chef."
@@ -118,6 +155,73 @@ p "AMI is Created!!!"
 
 
 
+##
+################################ Setting ELB
+##
+##p "ELB Task"
+##elb_instance = AWS::ELB.new
+##targeted_elb = elb_instance.load_balancers[ELB_NAME]
+##
+##@all_instance_id = []
+##@ec2.instances.each do |instance|
+##  @all_instance_id << instance.id
+##end
+##
+##
+################################ Change the Generation Tag to Lost Generation from Old Generation
+##
+##@all_instance_info.each_value do |value|
+##  tag_set = value[:tag_set]
+##  tag_set.each do |tag|
+##    if (tag[:key] == GENERATION_TAG && tag[:value] == PREVIOUS_GENERATION)
+##      old_to_lost_id = @all_instance_id.find{|elem| elem==value[:instance_id]}
+##      old_instance = @ec2.instances[old_to_lost_id]
+##      @ec2.tags.create(old_instance, GENERATION_TAG, value: DELETE_GENERATION)
+##    end
+##  end
+##end
+##
+################################ Change the Generation Tag to Old Generation under Load Balancer
+##
+##@deregister_id = []
+##instances_under_elb = targeted_elb.instances.select {|ins| ins.exists?}
+##instances_under_elb.each do |instance_under_elb|
+##  @ec2.tags.create(instance_under_elb, GENERATION_TAG, value: PREVIOUS_GENERATION)
+##  p "instance_under_elb.id = #{instance_under_elb.id}"
+##  @deregister_id << instance_under_elb.id
+##end
+##
+################################ Attachment the new instance on ELB
+##
+##targeted_elb.instances.register(@new_instance)
+##@ec2.tags.create(@new_instance, GENERATION_TAG, value: CURRENT_GENERATION)
+##p "New EC2 instance is connected !!"
+##
+################################ Disconnect the Old Generation instance
+##
+##running_instances_under_elb = targeted_elb.instances.select {|ins| ins.exists? && ins.status == :running}
+##running_instances_under_elb.each do |running_instance_under_elb|
+##  stopped_id = @deregister_id.find{|elem| elem==running_instance_under_elb.id}
+##  if !stopped_id.nil?
+##    targeted_elb.instances.deregister(running_instance_under_elb)
+##    @ec2.instances[running_instance_under_elb.id].stop
+##  end
+##end
+##
+##p "Old EC2 instances disconnect."
+##
+################################ Destroy the Lost Generation instance
+##
+##@all_instance_info.each_value do |value|
+##  tag_set = value[:tag_set]
+##  tag_set.each do |tag|
+##    if (tag[:key] == GENERATION_TAG && tag[:value] == DELETE_GENERATION)
+##      lost_id = value[:instance_id]
+##      @ec2.instances[lost_id].terminate
+##    end
+##  end
+##end
+##
 p "Done."
 
 
