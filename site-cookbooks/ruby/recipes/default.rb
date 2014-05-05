@@ -64,13 +64,3 @@ bash "install ruby" do
 end
 
 
-##bash "rails install" do
-##  code <<-EOC
-##    export PATH="/home/ubuntu/.rbenv/bin:$PATH"
-##    eval "$(rbenv init -)"
-##    source ~/.bashrc
-##    gem update --system
-##    gem install rails
-##  EOC
-##end
-
